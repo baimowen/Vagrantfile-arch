@@ -1,0 +1,123 @@
+Vagrant.configure("2") do |config|
+    # info
+    config.vm.box = "generic/arch"
+    config.vm.box_version = "4.3.12"
+    config.vm.hostname = "arch"
+    config.vm.box_check_update = false
+    config.ssh.forward_agent = true
+
+    # 禁用默认的共享文件夹
+    config.vm.synced_folder ".", "/vagrant", disabled: true
+
+    # resource
+    config.vm.provider "vmware_desktop" do |v|
+        v.gui = false
+        v.memory = 2048
+        v.cpus = 2
+        v.enable_vmrun_ip_lookup = false  # 禁用 vmrun IP 查找
+        v.vmx["ethernet0.virtualDev"] = "vmxnet3"
+        v.vmx["ethernet0.connectionType"] = "nat"
+        v.vmx["ethernet0.addressType"] = "generated"  # 自动生成MAC地址
+        v.vmx["ethernet0.present"] = "TRUE"
+    end
+
+    # network 
+    config.vm.network "private_network", ip: "192.168.99.11",
+        netmask: "255.255.255.0",
+        virtualbox__intnet: true,
+        vmware__hostonly: false
+    
+    # upload script
+    config.vm.provision "file", source: "arch_packages.sh", destination: "~/arch_packages.sh"
+
+    config.vm.provision "shell", inline: <<-SHELL
+        sudo cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak
+        cat <<'EOF'>> /etc/pacman.d/mirrorlist
+## China
+Server = http://mirrors.jlu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.jlu.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.ustc.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.tuna.tsinghua.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.hit.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.aliyun.com/archlinux/$repo/os/$arch
+Server = http://mirrors.cqu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.ustc.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.cqu.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.wsyu.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.neusoft.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.bfsu.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.aliyun.com/archlinux/$repo/os/$arch
+Server = https://mirrors.hit.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.neusoft.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.hust.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.nju.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.wsyu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.tuna.tsinghua.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirror.lzu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.bfsu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.nju.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.hust.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.zju.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.shanghaitech.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.shanghaitech.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirror.nyist.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirror.nyist.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.xjtu.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.163.com/archlinux/$repo/os/$arch
+Server = http://mirrors.jcut.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.jcut.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.qlu.edu.cn/archlinux/$repo/os/$arch
+Server = http://mirrors.jxust.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.jxust.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.sjtug.sjtu.edu.cn/archlinux/$repo/os/$arch
+EOF
+
+        # 临时使用 systemd-networkd 配置网络
+        sudo systemctl enable --now systemd-networkd
+        sudo systemctl enable --now systemd-resolved
+        cat <<'EOF' | sudo tee /etc/systemd/network/20-wired.network
+[Match]
+Name=ens32
+
+[Network]
+DHCP=yes
+EOF
+        sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+        sudo systemctl restart systemd-networkd
+        sudo systemctl restart systemd-resolved
+
+        ping -c 3 114.114.114.114 || echo "error: network is not available, please check your network settings."
+
+        chmod +x /tmp/archpackages.sh
+        sh ~/arch_packages.sh
+    SHELL
+
+    config.vm.post_up_message = <<-MESSAGE
+        Arch Linux 虚拟机已成功配置！
+
+        ████████████████████████████████████████
+        基本信息：
+        - 主机名：arch
+        - 登录方式：vagrant ssh
+        
+        网络配置：
+        - IP地址：192.168.99.11
+        - 子网掩码：255.255.255.0
+        - 网关：192.168.99.254
+        - DNS：114.114.114.114 / 223.5.5.5
+        
+        已安装组件：
+        √ yay AUR助手
+        √ 系统工具包
+        √ 开发环境（Conda/nvm）
+        √ Docker/Kubernetes工具
+        √ Web服务器套件
+        √ 终端增强工具
+        
+        注意事项：
+        1. 首次启动建议执行：sudo pacman -Syu
+        2. 部分配置需要重启生效
+        3. 使用 vagrant reload 重启虚拟机
+        ████████████████████████████████████████
+    MESSAGE
+end
