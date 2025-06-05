@@ -23,6 +23,7 @@ sudo pacman -Syu --noconfirm
 
 # ====================================   Install yay   =====================================
 echo "===== Installing yay... ====="
+sudo -v
 sudo pacman -S --noconfirm --needed base-devel git wget curl
 git clone https://aur.archlinux.org/yay.git || { echo "Failed to clone yay repository"; exit 1; }
 cd yay || { echo "Failed to enter yay directory"; exit 1; }
@@ -35,7 +36,8 @@ cd ..
 
 # ==================================== Install packages ====================================
 echo "===== Installing packages... ====="
-sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync \
+sudo -v
+sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync less \
     vim neovim \
     git lazygit \
     yazi \
@@ -48,7 +50,7 @@ sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync \
     cowsay lolcat
 
 # yay -S --noconfirm wine
-yay -S visual-studio-code-bin vagrant lazydocker
+yay -S --noconfirm visual-studio-code-bin vagrant lazydocker
 yay -S --noconfirm kind-bin minikube
 sudo pacman -S --noconfirm kubectl
 # kind create cluster --name kind-cluster
@@ -120,6 +122,7 @@ rm -rf 0xProto.zip && rm -rf /tmp/fonts
 
 # ==================================== Install Cockpit ====================================
 echo "===== Installing Cockpit... ====="
+sudo -v
 sudo pacman -S --noconfirm cockpit cockpit-podman cockpit-machines cockpit-packagekit
 sudo systemctl enable --now cockpit.socket
 sudo ufw allow 9090/tcp
@@ -129,6 +132,7 @@ sudo ufw allow 9090/tcp
 # nerdctl(containerd)
 # crictl(cri-o)  # Use with kubernetes
 echo "===== Installing Docker... ====="
+sudo -v
 sudo pacman -S --noconfirm docker docker-compose
 sudo systemctl enable --now docker
 sudo usermod -aG docker $USER
@@ -176,6 +180,7 @@ curl -fsSL https://tailscale.com/install.sh | sh
 
 # ==================================== Install zsh ====================================
 echo "===== Installing zsh... ====="
+sudo -v
 sudo pacman -S --noconfirm zsh
 chsh -s /bin/zsh
 
@@ -221,6 +226,19 @@ alias ..='cd ..'
 alias ...='cd ../..'
 alias ~='cd ~'
 
+# >>> git >>>
+alias gl='git log --all --graph --color=auto'
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit -m'
+alias gps='git push'
+alias gpl='git pull --rebase'
+alias gco='git checkout'
+alias gcb='git checkout -b'
+alias gplb='git pull --rebase origin $(git rev-parse --abbrev-ref HEAD)'
+alias gplm='git pull --rebase origin main'
+# <<< git <<<
+
 # starship
 eval "$(starship init zsh)"
 
@@ -246,6 +264,7 @@ EOF
 
 # ==================================== Install tmux ====================================
 echo "===== Installing Tmux... ====="
+sudo -v
 sudo pacman -S --noconfirm tmux
 cat << 'EOF' > ~/.tmux.conf
 # ~/.tmux.conf
@@ -311,6 +330,7 @@ fi
 
 # ==================================== Install starship ====================================
 echo "===== Installing Starship... ====="
+sudo -v
 sudo pacman -S --noconfirm starship
 starship preset catppuccin-powerline -o ~/.config/starship.toml
 sed -i '/\[line_break\]/,/^$/ s/disabled = true/disabled = false/' ~/.config/starship.toml
@@ -318,6 +338,7 @@ echo "Starship installed successfully. Now you can use it by running 'starship i
 
 # ==================================== Install wezterm ====================================
 echo "===== Installing WezTerm... ====="
+sudo -v
 sudo pacman -S --noconfirm wezterm
 mkdir -p ~/.config/wezterm
 touch ~/.config/wezterm/wezterm.lua
@@ -421,6 +442,7 @@ echo "nvm installed successfully. You can run 'nvm' to manage Node.js versions."
 
 # ==================================== clear package cache ====================================
 echo "===== Clearing package cache... ====="
+sudo -v
 sudo pacman -Scc
 rm -rf ~/.cache/*
 sudo rm -rf /tmp/*
@@ -461,4 +483,5 @@ EOF
 
 # ==================================== Switch to user shell ====================================
 su - $USER
+# exec $SHELL
 source ~/.zshrc
