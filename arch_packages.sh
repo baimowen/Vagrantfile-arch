@@ -8,13 +8,14 @@ sudo systemctl disable --now systemd-networkd
 sudo systemctl disable --now systemd-resolved
 sudo systemctl enable --now NetworkManager
 INTERFACE=$(ip -o -4 route show default | awk '{print $5}' | head -n1)
+read -p "Enter ip address: " IPADDR
 sudo nmcli connection add type ethernet \
     con-name "$INTERFACE" \
-    ifname ens32
+    ifname $INTERFACE
 sudo nmcli con mod "$INTERFACE" ipv4.method manual \
-    ipv4.address 192.168.99.11/24 \
+    ipv4.address $IPADDR/24 \
     ipv4.gateway 192.168.99.254 \
-    ipv4.dns 114.114.114.114
+    ipv4.dns "114.114.114.114 8.8.8.8 223.5.5.5"
 sudo nmcli con up "$INTERFACE"
 
 # ==================================== update && upgrade ====================================
@@ -34,7 +35,7 @@ cd ..
 
 # ==================================== Install packages ====================================
 echo "===== Installing packages... ====="
-sudo pacman -S --noconfirm openssh net-tools ufw \
+sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync \
     vim neovim \
     git lazygit \
     yazi \
@@ -42,13 +43,33 @@ sudo pacman -S --noconfirm openssh net-tools ufw \
     ncdu duf tree \
     btop \
     fzf \
-    bat
+    bat \
+    rsync \
+    cowsay lolcat
 
-yay -S --noconfirm neofetch \
-    kind-bin minikube \
+# yay -S --noconfirm wine
+yay -S visual-studio-code-bin vagrant lazydocker
+yay -S --noconfirm kind-bin minikube
+sudo pacman -S --noconfirm kubectl
+# kind create cluster --name kind-cluster
 
-git config --global user.name arch
-git config --global user.email arch@arch.template
+# This part can be written to an .env file
+read -p "Enter your username for git: " GIT_USER
+read -p "Enter your email for git: " GIT_EMAIL
+if [ -z "$GIT_USER" ]; then
+    GIT_USER="arch"
+fi
+if [ -z "$GIT_EMAIL" ]; then
+    GIT_EMAIL="arch@arch.template"
+fi
+
+git config --global pull.rebase true
+git config --global init.defaultBranch main
+git config --global status.branch true
+git config --global status.showStash true
+git config --global color.ui auto
+git config --global user.name "$GIT_USER"
+git config --global user.email "$GIT_EMAIL"
 
 sudo ufw allow 22/tcp
 sudo ufw enable
@@ -64,38 +85,38 @@ echo "0xProtoNerdFontMono font installed successfully. Cleaning up..."
 rm -rf 0xProto.zip && rm -rf /tmp/fonts 
 
 # ================================ grub_theme: Xenlism Grub Theme ================================
-is_uefi() {
-    [[ -d "/sys/firmware/efi/efivars" ]]
-}
-install_packages() {
-    local pkgs=("grub")
-    if is_uefi; then
-        pkgs+=("efibootmgr")
-    else
-        pkgs+=("os-prober")
-    fi
+# is_uefi() {
+#     [[ -d "/sys/firmware/efi/efivars" ]]
+# }
+# install_packages() {
+#     local pkgs=("grub")
+#     if is_uefi; then
+#         pkgs+=("efibootmgr")
+#     else
+#         pkgs+=("os-prober")
+#     fi
 
-    echo -e "Installing dependencies:${pkgs[*]}"
-    sudo pacman -Sy --noconfirm --needed "${pkgs[@]}"
-}
-install_grub_theme() {
-    echo "===== Installing Xenlism Grub Theme...====="
-    curl -LO https://raw.githubusercontent.com/xenlism/Grub-themes/refs/heads/main/xenlism-grub-arch-1080p.tar.xz
-    tar -xvf xenlism-grub-arch-1080p.tar.xz
-    cd xenlism-grub-arch-1080p && sudo sh ./install.sh
-    cd ..
-    echo "Xenlism Grub Theme installed successfully. Cleaning up..."
-    rm -rf xenlism-grub-arch-1080p && rm -rf xenlism-grub-arch-1080p.tar.xz
-}
-if [[ -f /boot/grub/grub.cfg ]] && [[ ! -f /boot/grub2/grub.cfg ]]; then
-    echo -e "GRUB is installed."
-    install_grub_theme
-else
-    echo -e "GRUB is not installed."
-    echo -e "Installing GRUB..."
-    is_uefi && install_packages
-    install_grub_theme
-fi
+#     echo -e "Installing dependencies:${pkgs[*]}"
+#     sudo pacman -Sy --noconfirm --needed "${pkgs[@]}"
+# }
+# install_grub_theme() {
+#     echo "===== Installing Xenlism Grub Theme...====="
+#     curl -LO https://raw.githubusercontent.com/xenlism/Grub-themes/refs/heads/main/xenlism-grub-arch-1080p.tar.xz
+#     tar -xvf xenlism-grub-arch-1080p.tar.xz
+#     cd xenlism-grub-arch-1080p && sudo sh ./install.sh
+#     cd ..
+#     echo "Xenlism Grub Theme installed successfully. Cleaning up..."
+#     rm -rf xenlism-grub-arch-1080p && rm -rf xenlism-grub-arch-1080p.tar.xz
+# }
+# if [[ -f /boot/grub/grub.cfg ]] && [[ ! -f /boot/grub2/grub.cfg ]]; then
+#     echo -e "GRUB is installed."
+#     install_grub_theme
+# else
+#     echo -e "GRUB is not installed."
+#     echo -e "Installing GRUB..."
+#     is_uefi && install_packages
+#     install_grub_theme
+# fi
 
 # ==================================== Install Cockpit ====================================
 echo "===== Installing Cockpit... ====="
@@ -104,30 +125,38 @@ sudo systemctl enable --now cockpit.socket
 sudo ufw allow 9090/tcp
 
 # ==================================== Install Docker ====================================
+# or podman(runc) 
+# nerdctl(containerd)
+# crictl(cri-o)  # Use with kubernetes
 echo "===== Installing Docker... ====="
 sudo pacman -S --noconfirm docker docker-compose
 sudo systemctl enable --now docker
 sudo usermod -aG docker $USER
 echo "Docker installed successfully. Create docker configuration file..."
-sudo mkdir -p /etc/docker
-cat << 'EOF' | sudo tee /etc/docker/daemon.json
-{
-    "registry-mirrors": [
-        "https://docker.1panel.live",
-        "https://docker.mirrors.tuna.tsinghua.edu.cn",
-        "https://mirror.gcr.io",
-        "https://registry.docker-cn.com",
-        "https://docker.mirrors.ustc.edu.cn"
-    ]
-}
-EOF
+# sudo mkdir -p /etc/docker
+# cat << 'EOF' | sudo tee /etc/docker/daemon.json
+# {
+#     "registry-mirrors": [
+#         "https://docker.1panel.live",
+#         "https://docker.mirrors.tuna.tsinghua.edu.cn",
+#         "https://mirror.gcr.io",
+#         "https://registry.docker-cn.com",
+#         "https://docker.mirrors.ustc.edu.cn"
+#     ]
+# }
+# EOF
+bash <(curl -sSL https://linuxmirrors.cn/docker.sh) && rm -f docker.sh
 sudo systemctl daemon-reload
 sudo systemctl restart docker
 echo "===== start dpanel... ====="
 sudo docker run -d --name dpanel --restart=always \
- -p 88:80 -p 443:443 -p 8807:8080 \
- -v /var/run/docker.sock:/var/run/docker.sock \
- -v /home/dpanel:/dpanel -e APP_NAME=dpanel dpanel/dpanel:latest
+  -p 88:80 -p 443:443 -p 8807:8080 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /home/dpanel:/dpanel -e APP_NAME=dpanel dpanel/dpanel:latest
+sudo docker run -d --name portainer --restart always \
+  -p 9000:9000 \
+  -v /var/run/docker.sock:/var/run/docker.sock -v /app/portainer_data:/data \
+  --privileged=true portainer/portainer-ce:latest
 sudo docker ps -a | grep -aiE dpanel
 
 # ==================================== Install Nginx ====================================
@@ -141,6 +170,9 @@ sudo ufw allow https
 # ==================================== Install FRP ====================================
 echo "===== Installing FRP... ====="
 yay -S --noconfirm frpc frps
+
+# ==================================== Install Tailscale ====================================
+curl -fsSL https://tailscale.com/install.sh | sh
 
 # ==================================== Install zsh ====================================
 echo "===== Installing zsh... ====="
@@ -287,6 +319,7 @@ echo "Starship installed successfully. Now you can use it by running 'starship i
 # ==================================== Install wezterm ====================================
 echo "===== Installing WezTerm... ====="
 sudo pacman -S --noconfirm wezterm
+mkdir -p ~/.config/wezterm
 touch ~/.config/wezterm/wezterm.lua
 cat << 'EOF' > ~/.config/wezterm/wezterm.lua
 -- Path: ~/.config/wezterm/wezterm.lua
@@ -354,6 +387,7 @@ wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/
 bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
 ~/miniconda3/bin/conda init zsh
 echo "hide conda base in prompt"
+conda --version
 conda config --set changeps1 false
 # conda config --set changeps1 true
 echo "Miniconda installed successfully. You can run 'conda' to manage your environments and packages."
@@ -372,18 +406,18 @@ EOF
 echo "nvm installed successfully. You can run 'nvm' to manage Node.js versions."
 
 # ==================================== Install cloudreve ====================================
-echo "===== Installing Cloudreve... ====="
-curl -LO https://github.com/cloudreve/Cloudreve/releases/download/4.0.0-beta.13/cloudreve_4.0.0-beta.13_linux_amd64.tar.gz
-if [ -f "cloudreve_4.0.0-beta.13_linux_amd64.tar.gz" ]; then
-    mkdir cloudreve && tar -xzf cloudreve_4.0.0-beta.13_linux_amd64.tar.gz -C cloudreve
-    chmod +x cloudreve/cloudreve
-    echo "Cloudreve installed successfully. You can run it with './cloudreve/cloudreve'."
-    echo "clean up..."
-    rm -rf cloudreve_4.0.0-beta.13_linux_amd64.tar.gz
-else
-    echo "Failed to download Cloudreve. Please check the URL or your internet connection."
-    echo "Skipping Cloudreve installation."
-fi
+# echo "===== Installing Cloudreve... ====="
+# curl -LO https://github.com/cloudreve/Cloudreve/releases/download/4.0.0-beta.13/cloudreve_4.0.0-beta.13_linux_amd64.tar.gz
+# if [ -f "cloudreve_4.0.0-beta.13_linux_amd64.tar.gz" ]; then
+#     mkdir cloudreve && tar -xzf cloudreve_4.0.0-beta.13_linux_amd64.tar.gz -C cloudreve
+#     chmod +x cloudreve/cloudreve
+#     echo "Cloudreve installed successfully. You can run it with './cloudreve/cloudreve'."
+#     echo "clean up..."
+#     rm -rf cloudreve_4.0.0-beta.13_linux_amd64.tar.gz
+# else
+#     echo "Failed to download Cloudreve. Please check the URL or your internet connection."
+#     echo "Skipping Cloudreve installation."
+# fi
 
 # ==================================== clear package cache ====================================
 echo "===== Clearing package cache... ====="
@@ -399,20 +433,22 @@ cat << 'EOF'
 The packages installed this time are: 
 ==========================================================================================================================================================
 Package Manager: yay
-Basic system tools: grub openssh networkmanager net-tools ufw vim neovim git lazygit yazi tree curl wget fzf bat neofetch
-Development Environment: conda nvm
+Basic system tools: grub openssh networkmanager net-tools ufw vim nvim git lazygit unp rsync jq yazi tree curl wget fzf bat fastfetch
+Development Environment: conda nvm visual-studio-code-bin
 System monitoring: btop duf ncdu
 Web server: nginx
-Intranet penetration: frp 
+Intranet penetration: frp tailscale
 Web panel: dpanel cockpit
 Efficiency tools: Tmux
 Docker: docker docker-compose
+vmanager: vagrant
+container manager panel: potainer
 kubernetes cluster: kind-bin minikube
-Cloud storage: cloudreve
+kubernetes cli: kubectl
+funny tools: cowsay lolcat
 
 About the beautification of the system:
 Fonts: 0xProtoNerdFontMono
-Grub Theme: Xenlism Grub Theme
 Terminal: wezterm
 vim: LazyVim
 zsh plugins: zsh-autosuggestions, zsh-syntax-highlighting, zsh-sudo, starship
