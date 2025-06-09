@@ -1,4 +1,9 @@
-#! /bin/sh
+#! /bin/bash
+
+[ "$(id -u)" -eq 0 ]; then
+    echo "Please do not run this script as root or with sudo."
+    exit 1
+fi 
 
 exec &> >(tee -a "output.log")
 
@@ -40,10 +45,10 @@ sudo -v
 sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync less \
     vim neovim \
     git lazygit \
-    yazi \
+    yazi lf \
     curl wget \
     ncdu duf tree \
-    btop \
+    btop ctop \
     fzf \
     bat \
     rsync \
@@ -190,25 +195,8 @@ git clone https://github.com/zsh-users/zsh-syntax-highlighting ~/.zsh/zsh-syntax
 git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions || echo "Failed to clone zsh-autosuggestions repository"
 git clone https://github.com/zap-zsh/sudo.git ~/.zsh/zsh-sudo || echo "Failed to clone zsh-sudo repository"
 
-cat << 'EOF' > ~/.zshrc
-# history settings
-HISTFILE=~/.cache/zsh_history
-HISTSIZE=50000
-SAVEHIST=50000
-setopt EXTENDED_HISTORY
-setopt INC_APPEND_HISTORY
-setopt SHARE_HISTORY
-setopt HIST_IGNORE_SPACE
-
-# git clone https://github.com/zsh-users/zsh-syntax-highlighting ~/.zsh/zsh-syntax-highlighting
-source ~/.zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-# git clone https://github.com/catppuccin/zsh-syntax-highlighting.git ~/.zsh/zsh-catppuccin
-source ~/.zsh/zsh-catppuccin/themes/catppuccin_mocha-zsh-syntax-highlighting.zsh
-# git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
-source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
-# git clone https://github.com/zap-zsh/sudo.git ~/.zsh/zsh-sudo
-source ~/.zsh/zsh-sudo/sudo.plugin.zsh
-
+mkdir -p ~/.config/shell
+cat <<'EOF' > ~/.config/shell/aliases.sh
 alias cp='cp -i'
 alias mv='mv -i'
 alias rm='rm -i'
@@ -239,9 +227,6 @@ alias gplb='git pull --rebase origin $(git rev-parse --abbrev-ref HEAD)'
 alias gplm='git pull --rebase origin main'
 # <<< git <<<
 
-# starship
-eval "$(starship init zsh)"
-
 # >>> tmux >>>
 # tmux sessions manage
 alias tls='tmux ls'
@@ -260,6 +245,35 @@ alias tv='tmux split-window -v'
 alias tsp='tmux select-pane -t'
 alias tkp='tmux kill-pane'
 # <<< tmux <<<
+EOF
+
+cat << 'EOF' > ~/.zshrc
+# history settings
+HISTFILE=~/.cache/zsh_history
+HISTSIZE=50000
+SAVEHIST=50000
+setopt EXTENDED_HISTORY
+setopt INC_APPEND_HISTORY
+setopt SHARE_HISTORY
+setopt HIST_IGNORE_SPACE
+
+[ -f "$HOME/.config/dircolors" ] && eval $(dircolors "$HOME/.config/dircolors")
+
+source <(/usr/bin/fzf --zsh)
+
+# git clone https://github.com/zsh-users/zsh-syntax-highlighting ~/.zsh/zsh-syntax-highlighting
+[ -f ~/.zsh/zsh-catppuccin/themes/catppuccin_mocha-zsh-syntax-highlighting.zsh ] && source $_ || :
+source ~/.zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+# git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
+[ -f ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh ] && source $_ || :
+# git clone https://github.com/zap-zsh/sudo.git ~/.zsh/zsh-sudo
+[ -f ~/.zsh/zsh-sudo/sudo.plugin.zsh ] && source $_ || :
+# git clone https://github.com/catppuccin/zsh-syntax-highlighting.git ~/.zsh/zsh-catppuccin
+[ -f ~/.zsh/zsh-catppuccin/themes/catppuccin_mocha-zsh-syntax-highlighting.zsh ] && source $_ || :
+
+# starship
+eval "$(starship init zsh)"
+
 EOF
 
 # ==================================== Install tmux ====================================
@@ -320,6 +334,8 @@ set -g set-clipboard on
 
 # Initialize TMUX plugin manager (keep this line at the very bottom of tmux.conf)
 run '~/.tmux/plugins/tpm/tpm'
+
+exec /bin/zsh
 EOF
 echo "Install tmux plugin manager: tpm"
 if git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm 2>/dev/null; then
