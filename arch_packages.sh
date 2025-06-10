@@ -1,6 +1,6 @@
 #! /bin/bash
 
-[ "$(id -u)" -eq 0 ]; then
+if [ "$(id -u)" -eq 0 ]; then
     echo "Please do not run this script as root or with sudo."
     exit 1
 fi 
@@ -14,9 +14,9 @@ sudo systemctl disable --now systemd-resolved
 sudo systemctl enable --now NetworkManager
 INTERFACE=$(ip -o -4 route show default | awk '{print $5}' | head -n1)
 read -p "Enter ip address: " IPADDR
-sudo nmcli connection add type ethernet \
-    con-name "$INTERFACE" \
-    ifname $INTERFACE
+# sudo nmcli connection add type ethernet \
+#     con-name "$INTERFACE" \
+#     ifname $INTERFACE
 sudo nmcli con mod "$INTERFACE" ipv4.method manual \
     ipv4.address $IPADDR/24 \
     ipv4.gateway 192.168.99.254 \
@@ -55,7 +55,7 @@ sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync less \
     cowsay lolcat
 
 # yay -S --noconfirm wine
-yay -S --noconfirm visual-studio-code-bin vagrant lazydocker
+yay -S --noconfirm visual-studio-code-bin
 yay -S --noconfirm kind-bin minikube
 sudo pacman -S --noconfirm kubectl
 # kind create cluster --name kind-cluster
@@ -177,11 +177,11 @@ sudo ufw allow http
 sudo ufw allow https
 
 # ==================================== Install FRP ====================================
-echo "===== Installing FRP... ====="
-yay -S --noconfirm frpc frps
+# echo "===== Installing FRP... ====="
+# yay -S --noconfirm frpc frps
 
 # ==================================== Install Tailscale ====================================
-curl -fsSL https://tailscale.com/install.sh | sh
+# curl -fsSL https://tailscale.com/install.sh | sh
 
 # ==================================== Install zsh ====================================
 echo "===== Installing zsh... ====="
@@ -258,6 +258,8 @@ setopt SHARE_HISTORY
 setopt HIST_IGNORE_SPACE
 
 [ -f "$HOME/.config/dircolors" ] && eval $(dircolors "$HOME/.config/dircolors")
+
+[ -f ~/.config/shell/aliases.sh ] && source ~/.config/shell/aliases.sh
 
 source <(/usr/bin/fzf --zsh)
 
@@ -352,56 +354,6 @@ starship preset catppuccin-powerline -o ~/.config/starship.toml
 sed -i '/\[line_break\]/,/^$/ s/disabled = true/disabled = false/' ~/.config/starship.toml
 echo "Starship installed successfully. Now you can use it by running 'starship init zsh' in your terminal."
 
-# ==================================== Install wezterm ====================================
-echo "===== Installing WezTerm... ====="
-sudo -v
-sudo pacman -S --noconfirm wezterm
-mkdir -p ~/.config/wezterm
-touch ~/.config/wezterm/wezterm.lua
-cat << 'EOF' > ~/.config/wezterm/wezterm.lua
--- Path: ~/.config/wezterm/wezterm.lua
--- github.com/riverify
--- This is a configuration file for wezterm, a GPU-accelerated terminal emulator for modern workflows.
-
-local wezterm = require("wezterm")
-
-config = wezterm.config_builder()
-
-config = {
-    automatically_reload_config = true,
-    enable_tab_bar = true,
-    hide_tab_bar_if_only_one_tab = true,    -- Hide the tab bar when there is only one tab
-    window_close_confirmation = "NeverPrompt",
-    window_decorations = "TITLE | RESIZE", -- disable the title bar but enable the resizable border
-    font = wezterm.font("JetBrains Mono"),
-    font_size = 18,
-    color_scheme = "Nord (Gogh)",
-    default_cursor_style = 'BlinkingBlock',
-    macos_window_background_blur = 25, -- Enable window background blur on macOS
-    background = {
-        {
-            source = {
-                Color = "#222030", -- dark purple
-            },
-            width = "100%",
-            height = "100%",
-            opacity = 0.70,
-        },
-    },
-    window_padding = {
-        left = 3,
-        right = 3,
-        top = 0,
-        bottom = 0,
-    },
-    initial_rows = 25,
-    initial_cols = 100,
-}
-
-return config
-EOF
-echo "WezTerm installed successfully. Now you can use it by running 'wezterm' after installing the desktop environment"
-
 # ==================================== Install lazyvim ====================================
 echo "===== Installing LazyVim... ====="
 mv ~/.config/nvim{,.bak}
@@ -470,16 +422,14 @@ echo "Done. Please restart your terminal or run 'source ~/.zshrc' to apply chang
 cat << 'EOF'
 The packages installed this time are: 
 ==========================================================================================================================================================
-Package Manager: yay
-Basic system tools: grub openssh networkmanager net-tools ufw vim nvim git lazygit unp rsync jq yazi tree curl wget fzf bat fastfetch
+aur repository tool: yay
+Basic system tools: grub openssh networkmanager net-tools ufw vim nvim git lazygit unp rsync jq yazi lf tree curl wget fzf bat fastfetch
 Development Environment: conda nvm visual-studio-code-bin
 System monitoring: btop duf ncdu
 Web server: nginx
-Intranet penetration: frp tailscale
 Web panel: dpanel cockpit
 Efficiency tools: Tmux
 Docker: docker docker-compose
-vmanager: vagrant
 container manager panel: potainer
 kubernetes cluster: kind-bin minikube
 kubernetes cli: kubectl
@@ -487,7 +437,6 @@ funny tools: cowsay lolcat
 
 About the beautification of the system:
 Fonts: 0xProtoNerdFontMono
-Terminal: wezterm
 vim: LazyVim
 zsh plugins: zsh-autosuggestions, zsh-syntax-highlighting, zsh-sudo, starship
 Tmux plugins: tmux-plugins/tpm, tmux-plugins/tmux-sensible, christoomey/vim-tmux-navigator, tmux-plugins/tmux-yank, jimeh/tmuxifier, catppuccin/tmux
@@ -498,6 +447,6 @@ You need to run "source ~/.zshrc" to apply the changes made to your zsh configur
 EOF
 
 # ==================================== Switch to user shell ====================================
-su - $USER
-# exec $SHELL
-source ~/.zshrc
+# su - $USER
+exec $SHELL
+# source ~/.zshrc
