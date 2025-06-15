@@ -5,12 +5,13 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi 
 
-exec &> >(tee -a "output.log")
+[ -f /tmp/arch_packages.log ] && rm -f /tmp/arch_packages.log
+exec &> >(tee -a /tmp/arch_packages.log)
 
 # ==================================== switch network ====================================
 sudo pacman -Syu --noconfirm && sudo pacman -S --noconfirm networkmanager
 sudo systemctl disable --now systemd-networkd
-sudo systemctl disable --now systemd-resolved
+# sudo systemctl disable --now systemd-resolved
 sudo systemctl enable --now NetworkManager
 INTERFACE=$(ip -o -4 route show default | awk '{print $5}' | head -n1)
 read -p "Enter ip address: " IPADDR
@@ -28,7 +29,6 @@ sudo pacman -Syu --noconfirm
 
 # ====================================   Install yay   =====================================
 echo "===== Installing yay... ====="
-sudo -v
 sudo pacman -S --noconfirm --needed base-devel git wget curl
 git clone https://aur.archlinux.org/yay.git || { echo "Failed to clone yay repository"; exit 1; }
 cd yay || { echo "Failed to enter yay directory"; exit 1; }
@@ -41,26 +41,28 @@ cd ..
 
 # ==================================== Install packages ====================================
 echo "===== Installing packages... ====="
-sudo -v
 sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync less \
     vim neovim \
     git lazygit \
     yazi lf \
     curl wget \
     ncdu duf tree \
-    btop ctop \
-    fzf \
+    btop ctop mission-center \
     bat \
     rsync \
-    cowsay lolcat
+    cowsay lolcat cava
 
-# yay -S --noconfirm wine
-yay -S --noconfirm visual-studio-code-bin
-yay -S --noconfirm kind-bin minikube
-sudo pacman -S --noconfirm kubectl
-# kind create cluster --name kind-cluster
+sudo pacman -S --noconfirm fastfetch
+yay -S --noconfirm rxfetch musicfox
 
+# yay -S --noconfirm wine visual-studio-code-bin
+
+sudo ufw allow 22/tcp
+sudo ufw enable
+
+# ==================================== Configuration git ====================================
 # This part can be written to an .env file
+echo "===== Configuring git... ====="
 read -p "Enter your username for git: " GIT_USER
 read -p "Enter your email for git: " GIT_EMAIL
 if [ -z "$GIT_USER" ]; then
@@ -78,9 +80,6 @@ git config --global color.ui auto
 git config --global user.name "$GIT_USER"
 git config --global user.email "$GIT_EMAIL"
 
-sudo ufw allow 22/tcp
-sudo ufw enable
-
 # ================================ fonts: 0xProtoNerdFontMono ================================
 echo "===== Installing 0xProtoNerdFontMono font... ====="
 curl --fail --show-error -LO https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/0xProto.zip
@@ -91,43 +90,8 @@ sudo fc-cache -fv
 echo "0xProtoNerdFontMono font installed successfully. Cleaning up..."
 rm -rf 0xProto.zip && rm -rf /tmp/fonts 
 
-# ================================ grub_theme: Xenlism Grub Theme ================================
-# is_uefi() {
-#     [[ -d "/sys/firmware/efi/efivars" ]]
-# }
-# install_packages() {
-#     local pkgs=("grub")
-#     if is_uefi; then
-#         pkgs+=("efibootmgr")
-#     else
-#         pkgs+=("os-prober")
-#     fi
-
-#     echo -e "Installing dependencies:${pkgs[*]}"
-#     sudo pacman -Sy --noconfirm --needed "${pkgs[@]}"
-# }
-# install_grub_theme() {
-#     echo "===== Installing Xenlism Grub Theme...====="
-#     curl -LO https://raw.githubusercontent.com/xenlism/Grub-themes/refs/heads/main/xenlism-grub-arch-1080p.tar.xz
-#     tar -xvf xenlism-grub-arch-1080p.tar.xz
-#     cd xenlism-grub-arch-1080p && sudo sh ./install.sh
-#     cd ..
-#     echo "Xenlism Grub Theme installed successfully. Cleaning up..."
-#     rm -rf xenlism-grub-arch-1080p && rm -rf xenlism-grub-arch-1080p.tar.xz
-# }
-# if [[ -f /boot/grub/grub.cfg ]] && [[ ! -f /boot/grub2/grub.cfg ]]; then
-#     echo -e "GRUB is installed."
-#     install_grub_theme
-# else
-#     echo -e "GRUB is not installed."
-#     echo -e "Installing GRUB..."
-#     is_uefi && install_packages
-#     install_grub_theme
-# fi
-
 # ==================================== Install Cockpit ====================================
 echo "===== Installing Cockpit... ====="
-sudo -v
 sudo pacman -S --noconfirm cockpit cockpit-podman cockpit-machines cockpit-packagekit
 sudo systemctl enable --now cockpit.socket
 sudo ufw allow 9090/tcp
@@ -137,24 +101,12 @@ sudo ufw allow 9090/tcp
 # nerdctl(containerd)
 # crictl(cri-o)  # Use with kubernetes
 echo "===== Installing Docker... ====="
-sudo -v
 sudo pacman -S --noconfirm docker docker-compose
 sudo systemctl enable --now docker
 sudo usermod -aG docker $USER
 echo "Docker installed successfully. Create docker configuration file..."
-# sudo mkdir -p /etc/docker
-# cat << 'EOF' | sudo tee /etc/docker/daemon.json
-# {
-#     "registry-mirrors": [
-#         "https://docker.1panel.live",
-#         "https://docker.mirrors.tuna.tsinghua.edu.cn",
-#         "https://mirror.gcr.io",
-#         "https://registry.docker-cn.com",
-#         "https://docker.mirrors.ustc.edu.cn"
-#     ]
-# }
-# EOF
-bash <(curl -sSL https://linuxmirrors.cn/docker.sh) && rm -f docker.sh
+sudo mkdir -p /etc/docker
+sudo bash <(curl -sSL https://linuxmirrors.cn/docker.sh) && rm -f docker.sh
 sudo systemctl daemon-reload
 sudo systemctl restart docker
 echo "===== start dpanel... ====="
@@ -166,7 +118,13 @@ sudo docker run -d --name portainer --restart always \
   -p 9000:9000 \
   -v /var/run/docker.sock:/var/run/docker.sock -v /app/portainer_data:/data \
   --privileged=true portainer/portainer-ce:latest
-sudo docker ps -a | grep -aiE dpanel
+sudo docker ps -a | grep -aiE "dpanel|portainer"
+
+# ==================================== Install kubernetes ====================================
+echo "===== Installing Kubernetes... ====="
+yay -S --noconfirm kind-bin minikube
+sudo pacman -S --noconfirm kubectl
+kind create cluster --name kind-cluster
 
 # ==================================== Install Nginx ====================================
 echo "===== Installing nginx... ====="
@@ -177,16 +135,16 @@ sudo ufw allow http
 sudo ufw allow https
 
 # ==================================== Install FRP ====================================
-# echo "===== Installing FRP... ====="
-# yay -S --noconfirm frpc frps
+echo "===== Installing FRP... ====="
+yay -S --noconfirm frpc frps
 
 # ==================================== Install Tailscale ====================================
-# curl -fsSL https://tailscale.com/install.sh | sh
+echo "===== Installing Tailscale... ====="
+curl -fsSL https://tailscale.com/install.sh | sh
 
 # ==================================== Install zsh ====================================
 echo "===== Installing zsh... ====="
-sudo -v
-sudo pacman -S --noconfirm zsh
+sudo pacman -S --noconfirm zsh fzf
 chsh -s /bin/zsh
 
 echo "Install zsh plugin: zsh-autosuggestions, zsh-syntax-highlighting, zsh-sudo"
@@ -208,13 +166,13 @@ alias c='clear'
 alias his='history'
 alias df='df -h'
 alias du='du -h'
-# alias du='ncdu .'
 alias free='free -h'
-alias ..='cd ..'
-alias ...='cd ../..'
-alias ~='cd ~'
+# alias ..='cd ..'
+# alias ...='cd ../..'
+# alias ~='cd ~'
 
 # >>> git >>>
+alias lg='lazygit'
 alias gl='git log --all --graph --color=auto'
 alias gs='git status'
 alias ga='git add'
@@ -280,9 +238,13 @@ eval "$(starship init zsh)"
 
 EOF
 
+echo "[ -f ~/.zshrc ] && source ~/.zshrc" | tee ~/.zprofile > /dev/null
+
+fzf --zsh > ~/.config/shell/fzf.zsh > /dev/null
+echo "source ~/.config/shell/fzf.zsh" | tee -a ~/.zshrc > /dev/null
+
 # ==================================== Install tmux ====================================
 echo "===== Installing Tmux... ====="
-sudo -v
 sudo pacman -S --noconfirm tmux
 cat << 'EOF' > ~/.tmux.conf
 # ~/.tmux.conf
@@ -350,7 +312,6 @@ fi
 
 # ==================================== Install starship ====================================
 echo "===== Installing Starship... ====="
-sudo -v
 sudo pacman -S --noconfirm starship
 starship preset catppuccin-powerline -o ~/.config/starship.toml
 sed -i '/\[line_break\]/,/^$/ s/disabled = true/disabled = false/' ~/.config/starship.toml
@@ -368,7 +329,7 @@ if [ -d ~/.config/nvim ]; then
     echo "LazyVim installed successfully. Now you can run 'nvim' to start using it."
 else
     echo "Failed to clone LazyVim repository."
-    echo "skipping LazyVim installation."
+    echo "Skipping LazyVim installation."
 fi
 
 # ==================================== Install conda ====================================
@@ -396,23 +357,8 @@ export NVM_DIR="$HOME/.nvm"
 EOF
 echo "nvm installed successfully. You can run 'nvm' to manage Node.js versions."
 
-# ==================================== Install cloudreve ====================================
-# echo "===== Installing Cloudreve... ====="
-# curl -LO https://github.com/cloudreve/Cloudreve/releases/download/4.0.0-beta.13/cloudreve_4.0.0-beta.13_linux_amd64.tar.gz
-# if [ -f "cloudreve_4.0.0-beta.13_linux_amd64.tar.gz" ]; then
-#     mkdir cloudreve && tar -xzf cloudreve_4.0.0-beta.13_linux_amd64.tar.gz -C cloudreve
-#     chmod +x cloudreve/cloudreve
-#     echo "Cloudreve installed successfully. You can run it with './cloudreve/cloudreve'."
-#     echo "clean up..."
-#     rm -rf cloudreve_4.0.0-beta.13_linux_amd64.tar.gz
-# else
-#     echo "Failed to download Cloudreve. Please check the URL or your internet connection."
-#     echo "Skipping Cloudreve installation."
-# fi
-
 # ==================================== clear package cache ====================================
 echo "===== Clearing package cache... ====="
-sudo -v
 sudo pacman -Scc
 rm -rf ~/.cache/*
 sudo rm -rf /tmp/*
@@ -420,35 +366,43 @@ sudo rm -rf /usr/lib/modules/$(uname -r)-old
 echo "Package cache cleared."
 
 # ==================================== Finalize setup ====================================
-echo "Done. Please restart your terminal or run 'source ~/.zshrc' to apply changes."
-cat << 'EOF'
-The packages installed this time are: 
-==========================================================================================================================================================
-aur repository tool: yay
-Basic system tools: grub openssh networkmanager net-tools ufw vim nvim git lazygit unp rsync jq yazi lf tree curl wget fzf bat fastfetch
-Development Environment: conda nvm visual-studio-code-bin
-System monitoring: btop duf ncdu
-Web server: nginx
-Web panel: dpanel cockpit
-Efficiency tools: Tmux
-Docker: docker docker-compose
-container manager panel: potainer
-kubernetes cluster: kind-bin minikube
-kubernetes cli: kubectl
-funny tools: cowsay lolcat
-
-About the beautification of the system:
-Fonts: 0xProtoNerdFontMono
-vim: LazyVim
-zsh plugins: zsh-autosuggestions, zsh-syntax-highlighting, zsh-sudo, starship
-Tmux plugins: tmux-plugins/tpm, tmux-plugins/tmux-sensible, christoomey/vim-tmux-navigator, tmux-plugins/tmux-yank, jimeh/tmuxifier, catppuccin/tmux
-
-Please run 'yay -Syu' and 'sudo pacman -Syu' to update your system and install any additional packages you may need."
-You need to run "source ~/.zshrc" to apply the changes made to your zsh configuration.
-==========================================================================================================================================================
-EOF
+echo "Done. 🎉"
+echo -e "\033[1;36m\n📦 Packages\033[0m\n
+\033[1;33m▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\033[0m\n
+\033[1;32m■ Basic Packages\033[0m
+  ├─ \033[1;34mSystem Manage\033[0m: openssh networkmanager net-tools ufw ncdu duf yay
+  ├─ \033[1;34mFile Manage\033[0m: yazi lf tree unp rsync
+  ├─ \033[1;34mNetwork Tools\033[0m: curl wget frp tailscale
+  └─ \033[1;34mOthers\033[0m: fastfetch rxfetch\n
+\033[1;32m■ Terminal Enhancement\033[0m
+  ├─ \033[1;35mShell\033[0m: zsh starship
+  ├─ \033[1;35mMultiplex\033[0m: tmux
+  ├─ \033[1;35mFile Process\033[0m: fzf bat less jq
+  └─ \033[1;35mPlugins\033[0m:
+      ├─ zsh: autosuggestions/syntax-highlighting/sudo/fzf
+      └─ tmux: tpm/sensible/vim-navigator/yank\n
+\033[1;32m■ System Service\033[0m
+  ├─ \033[1;33mWeb Server\033[0m: nginx
+  ├─ \033[1;33mMonitor Panel\033[0m:
+  |   ├─ cockpit: http://0.0.0.0:9000
+  |   └─ dpanel: http://0.0.0.0:8807
+  └─ \033[1;33mPerformance Monitor\033[0m: btop ctop mission-center\n
+\033[1;32m■ Development\033[0m
+  ├─ \033[1;36mEditor\033[0m: neo vim lazyvim
+  ├─ \033[1;36mVersion Control\033[0m: git lazygit
+  ├─ \033[1;36mContainer Management\033[0m: docker portainer(http://0.0.0.0:9000)
+  ├─ \033[1;36mCluster\033[0m: kubectl kind minikube
+  └─ \033[1;36mEnvs\033[0m: conda nvm\n
+\033[1;32m■ Funny Tools\033[0m
+  ├─ \033[1;31mtexxt:\033[0m: cowsay lolcat
+  └─ \033[1;31maudio:\033[0m: musicfox cava\n
+\033[1;32m■ Landscaping Extension\033[0m
+  ├─ \033[1;35mfonts\033[0m: 0xProtoNerdMono MapleMonoNFCN
+  └─ \033[1;35mcolor_theme\033[0m: Catppuccin\n
+\033[1;33m▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\033[0m
+\033[3;36mTips: Please restart your terminal or run 'source ~/.zshrc' to apply changes\n      Maybe you need to run 'conda config --set changeps1 false' to hide conda base in prompt.\033[0m" | sed 's/^/  /'
+[ -f /tmp/arch_packages.log ] && echo -e "Log file: \033[1;33m/tmp/arch_packages.log\033[0m" || echo -e "\033[1;31mCreate log file failed\033[0m, please run 'journalctl -xe' to check system logs."
 
 # ==================================== Switch to user shell ====================================
-# su - $USER
-exec $SHELL
+su - $USER
 # source ~/.zshrc
