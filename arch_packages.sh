@@ -80,15 +80,34 @@ git config --global color.ui auto
 git config --global user.name "$GIT_USER"
 git config --global user.email "$GIT_EMAIL"
 
-# ================================ fonts: 0xProtoNerdFontMono ================================
-echo "===== Installing 0xProtoNerdFontMono font... ====="
-curl --fail --show-error -LO https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/0xProto.zip
+# ================================ fonts: 0xProtoNerdFontMono MapleMonoNFCN ================================
 sudo pacman -S --noconfirm unzip fontconfig
-mkdir /tmp/fonts && unzip 0xProto.zip -d /tmp/fonts
-sudo mkdir -p /usr/share/fonts && sudo cp -r /tmp/fonts/* /usr/share/fonts/
-sudo fc-cache -fv
-echo "0xProtoNerdFontMono font installed successfully. Cleaning up..."
-rm -rf 0xProto.zip && rm -rf /tmp/fonts 
+
+# echo "===== Installing 0xProtoNerdFontMono font... ====="
+# wget -t 3 -P /tmp https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/0xProto.zip
+# if [ -f /tmp/0xProto.zip ]; then
+#     mkdir -p /tmp/fonts/0xProto
+#     unzip /tmp/0xProto.zip -d /tmp/fonts/0xProto
+#     sudo mkdir -p /usr/share/fonts/0xProto && sudo cp -r /tmp/fonts/0xProto/* /usr/share/fonts/0xProto
+#     sudo fc-cache -fv
+#     echo "0xProtoNerdFontMono font installed successfully. Cleaning up..."
+#     rm -rf /tmp/0xProto.zip && rm -rf /tmp/fonts/0xProto
+# else
+#     echo "Failed to install 0xProtoNerdFontMono font."
+# fi
+
+echo "===== Installing MapleMonoNFCN font... ====="
+wget -t 3 -P /tmp https://github.com/subframe7536/maple-font/releases/download/v7.3/MapleMono-NF-CN.zip
+if [ -f /tmp/MapleMono-NF-CN.zip ]; then
+    mkdir -p /tmp/fonts/MapleMono-NF-CN
+    unzip /tmp/MapleMono-NF-CN.zip -d /tmp/fonts/MapleMono-NF-CN
+    sudo mkdir -p /usr/share/fonts/MapleMono-NF-CN && sudo cp -r /tmp/fonts/MapleMono-NF-CN/* /usr/share/fonts/MapleMono-NF-CN
+    sudo fc-cache -fv
+    echo "MapleMonoNFCN font installed successfully. Cleaning up..."
+    rm -rf /tmp/MapleMono-NF-CN.zip && rm -rf /tmp/fonts/MapleMono-NF-CN
+else
+    echo "Failed to install MapleMonoNFCN font."
+fi
 
 # ==================================== Install Cockpit ====================================
 echo "===== Installing Cockpit... ====="
