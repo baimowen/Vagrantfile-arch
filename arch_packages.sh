@@ -60,6 +60,79 @@ yay -S --noconfirm rxfetch musicfox
 sudo ufw allow 22/tcp
 sudo ufw enable
 
+# ==================================== Install tmux ====================================
+echo "===== Installing Tmux... ====="
+sudo pacman -S --noconfirm tmux
+echo "Install tmux plugin manager: tpm"
+if git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm 2>/dev/null; then
+    ~/.tmux/plugins/tpm/bin/install_plugins
+else
+    echo "Warning: TPM installation skipped (git clone failed)."
+fi
+echo "create tmux configuration file: ~/.tmux.conf"
+cat << 'EOF' > ~/.tmux.conf
+# ~/.tmux.conf
+set -g default-command "exec zsh -l"
+# set-option -g default-command "reattach-to-user-namespace -l $SHELL"
+
+# keymaps
+unbind C-b
+set -g prefix `
+bind ` send-prefix
+
+# List of plugins
+set -g @plugin 'tmux-plugins/tpm'
+set -g @plugin 'tmux-plugins/tmux-sensible'
+set -g @plugin 'christoomey/vim-tmux-navigator'
+set -g @plugin 'tmux-plugins/tmux-yank'
+set -g @plugin 'jimeh/tmuxifier'
+
+# catppuccin theme
+set -g @plugin "catppuccin/tmux"
+set -g @catppuccin_flavour "mocha"
+
+# non-plugin options
+set -g default-terminal "tmux-256color"
+set -g base-index 1
+set -g pane-base-index 1
+set -g renumber-windows on
+set -g mouse on
+
+# 更改复制模式的默认行为为熟悉的vi风格
+# tmux中复制模式通常使用复制模式的步骤如下:
+#   1. 输入 <[>      进入复制模式
+#   2. 按下 <空格键> 开始复制，移动光标选择复制区域
+#   3. 按下 <回车键> 复制选中文本并退出复制模式
+#   4. 按下 <]>      粘贴文本
+# 开启vi风格后, 支持vi的C-d、C-u、hjkl等快捷键
+setw -g mode-keys vi
+
+# Vim 风格的快捷键实现窗格间移动
+bind h select-pane -L
+bind j select-pane -D
+bind k select-pane -U
+bind l select-pane -R
+
+# visual mode
+set-window-option -g mode-keys vi
+bind-key -T copy-mode-vi v send-keys -X begin-selection
+bind-key -T copy-mode-vi C-v send-keys -X rectangle-toggle
+bind-key -T copy-mode-vi y send-keys -X copy-selection-and-cancel
+
+# clipboard support
+set -g set-clipboard on
+
+# Initialize TMUX plugin manager (keep this line at the very bottom of tmux.conf)
+run '~/.tmux/plugins/tpm/tpm'
+
+EOF
+tmux new-session -d -s tmux_setup
+tmux send-keys -t tmux_setup "tmux source ~/.tmux.conf" Enter
+tmux send-keys -t tmux_setup "sleep 1" Enter
+tmux send-keys -t tmux_setup "`tmux show-options -g prefix | cut -d\' -f2`I" Enter
+tmux send-keys -t tmux_setup "sleep 10" Enter
+sleep 5
+
 # ==================================== Configuration git ====================================
 # This part can be written to an .env file
 echo "===== Configuring git... ====="
@@ -224,8 +297,20 @@ alias tkp='tmux kill-pane'
 # <<< tmux <<<
 EOF
 
-cat << 'EOF' > ~/.zshrc
-# history settings
+cat <<'EOF' > ~/.config/shell/bindkeys.sh
+# vi
+# bindkey -v
+# export KEYTIMEOUT=1
+# bindkey '^R' history-incremental-search-backward
+# bind key: esc esc -> sudo
+# bindkey -M viins '\e\e' sudo
+# bindkey -M vicmd '\e\e' sudo
+EOF
+
+echo '[ -f "$HOME/.config/dircolors" ] && eval $(dircolors "$HOME/.config/dircolors")' | \
+tee ~/.config/shell/colors.sh > /dev/null
+
+cat <<'EOF' > ~/.config/shell/history_settings.sh
 HISTFILE=~/.cache/zsh_history
 HISTSIZE=50000
 SAVEHIST=50000
@@ -233,12 +318,18 @@ setopt EXTENDED_HISTORY
 setopt INC_APPEND_HISTORY
 setopt SHARE_HISTORY
 setopt HIST_IGNORE_SPACE
+EOF
 
-[ -f "$HOME/.config/dircolors" ] && eval $(dircolors "$HOME/.config/dircolors")
+cat <<'EOF' > ~/.zshrc
+case $- in  # check shell options
+    *i*) ;;  # interactive shell
+      *) return;;  # don't do anything
+esac
 
+[ -f ~/.config/shell/colors.sh ] && source ~/.config/shell/colors.sh
 [ -f ~/.config/shell/aliases.sh ] && source ~/.config/shell/aliases.sh
-
-source <(/usr/bin/fzf --zsh)
+[ -f ~/.config/shell/bindkeys.sh ] && source ~/.config/shell/bindkeys.sh
+[ -f ~/.config/shell/history_settings.sh ] && source ~/.config/shell/history_settings.sh
 
 # git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
 # [ -f ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh ] && source $_ || :
@@ -255,79 +346,20 @@ source ~/.zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 # starship
 eval "$(starship init zsh)"
 
+# fzf
+# source <(/usr/bin/fzf --zsh)
 EOF
 
-echo "[ -f ~/.zshrc ] && source ~/.zshrc" | tee ~/.zprofile > /dev/null
+cat <<'EOF' > ~/.zprofile
+[ -f ~/.zshrc ] && source ~/.zshrc
+if [ -z "${WAYLAND_DISPLAY}" ] && [ "$(tty)" = "/dev/tty1" ]; then
+    exec Hyprland
+fi
+EOF
 
 fzf --zsh > ~/.config/shell/fzf.zsh > /dev/null
-echo "source ~/.config/shell/fzf.zsh" | tee -a ~/.zshrc > /dev/null
-
-# ==================================== Install tmux ====================================
-echo "===== Installing Tmux... ====="
-sudo pacman -S --noconfirm tmux
-cat << 'EOF' > ~/.tmux.conf
-# ~/.tmux.conf
-set -g default-command "exec zsh -l"
-# set-option -g default-command "reattach-to-user-namespace -l $SHELL"
-
-# keymaps
-unbind C-b
-set -g prefix `
-bind ` send-prefix
-
-# List of plugins
-set -g @plugin 'tmux-plugins/tpm'
-set -g @plugin 'tmux-plugins/tmux-sensible'
-set -g @plugin 'christoomey/vim-tmux-navigator'
-set -g @plugin 'tmux-plugins/tmux-yank'
-set -g @plugin 'jimeh/tmuxifier'
-
-# catppuccin theme
-set -g @plugin "catppuccin/tmux"
-set -g @catppuccin_flavour "mocha"
-
-# non-plugin options
-set -g default-terminal "tmux-256color"
-set -g base-index 1
-set -g pane-base-index 1
-set -g renumber-windows on
-set -g mouse on
-
-# 更改复制模式的默认行为为熟悉的vi风格
-# tmux中复制模式通常使用复制模式的步骤如下:
-#   1. 输入 <[>      进入复制模式
-#   2. 按下 <空格键> 开始复制，移动光标选择复制区域
-#   3. 按下 <回车键> 复制选中文本并退出复制模式
-#   4. 按下 <]>      粘贴文本
-# 开启vi风格后, 支持vi的C-d、C-u、hjkl等快捷键
-setw -g mode-keys vi
-
-# Vim 风格的快捷键实现窗格间移动
-bind h select-pane -L
-bind j select-pane -D
-bind k select-pane -U
-bind l select-pane -R
-
-# visual mode
-set-window-option -g mode-keys vi
-bind-key -T copy-mode-vi v send-keys -X begin-selection
-bind-key -T copy-mode-vi C-v send-keys -X rectangle-toggle
-bind-key -T copy-mode-vi y send-keys -X copy-selection-and-cancel
-
-# clipboard support
-set -g set-clipboard on
-
-# Initialize TMUX plugin manager (keep this line at the very bottom of tmux.conf)
-run '~/.tmux/plugins/tpm/tpm'
-
-exec /bin/zsh
-EOF
-echo "Install tmux plugin manager: tpm"
-if git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm 2>/dev/null; then
-    ~/.tmux/plugins/tpm/bin/install_plugins
-else
-    echo "Warning: TPM installation skipped (git clone failed)."
-fi
+# echo "[ -f ~/.config/shell/fzf.sh ] && source ~/.config/shell/fzf.zsh" | tee -a ~/.zshrc > /dev/null
+sed -i '/^# fzf$/a\[ -f ~\/.config\/shell\/fzf.sh ] \&\& source ~\/.config\/shell\/fzf.zsh' ~/.zshrc
 
 # ==================================== Install starship ====================================
 echo "===== Installing Starship... ====="
