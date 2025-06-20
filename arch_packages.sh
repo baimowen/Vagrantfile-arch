@@ -5,8 +5,8 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi 
 
-[ -f /tmp/arch_packages.log ] && rm -f /tmp/arch_packages.log
-exec &> >(tee -a /tmp/arch_packages.log)
+[ -f ~/.cache/arch_packages.log ] && rm -f ~/.cache/arch_packages.log
+exec &> >(tee -a ~/.cache/arch_packages.log)
 
 # ==================================== switch network ====================================
 sudo pacman -Syu --noconfirm && sudo pacman -S --noconfirm networkmanager
@@ -41,7 +41,7 @@ cd ..
 
 # ==================================== Install packages ====================================
 echo "===== Installing packages... ====="
-sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync less \
+sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync less dos2unix \
     vim neovim \
     git lazygit \
     yazi lf \
@@ -53,7 +53,9 @@ sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync less \
     cowsay lolcat cava
 
 sudo pacman -S --noconfirm fastfetch
-yay -S --noconfirm rxfetch musicfox
+yay -S --noconfirm neofetch rxfetch musicfox
+
+neofetch
 
 # yay -S --noconfirm wine visual-studio-code-bin
 
@@ -181,6 +183,11 @@ if [ -f /tmp/MapleMono-NF-CN.zip ]; then
 else
     echo "Failed to install MapleMonoNFCN font."
 fi
+
+# ==================================== neofetch ====================================
+[ -d ~/.config/neofetch ] || mkdir ~/.config/neofetch
+git clone https://github.com/Chick2D/neofetch-themes.git
+cat neofetch-themes/small/dotfetch.conf | tee -a ~/.config/neofetch/config.conf >/dev/null
 
 # ==================================== Install Cockpit ====================================
 echo "===== Installing Cockpit... ====="
@@ -392,6 +399,40 @@ bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
 echo "hide conda base in prompt"
 conda --version
 conda config --set changeps1 false
+
+cat <<'EOF' | tee -a ~/.zshrc >/dev/null
+# >>> conda initialize >>>
+# Conda 延迟加载配置（支持多路径检测，但优先使用 /home/arch/miniconda3）
+export CONDA_PATHS=(
+    /home/arch/miniconda3/bin/conda  # 你的明确路径
+    /data/miniconda3/bin/conda       # 其他可能路径
+    $HOME/miniconda3/bin/conda       # 用户级默认路径
+)
+
+# 定义 conda 函数（首次调用时加载）
+conda() {
+    echo "[Lazy Load] Initializing Conda..."  # 提示信息（可删）
+    unfunction conda  # 移除临时函数，避免重复加载
+
+    # 遍历可能的 Conda 路径
+    for conda_path in $CONDA_PATHS; do
+        if [[ -f $conda_path ]]; then
+            echo "Found Conda at: $conda_path"  # 调试信息（可删）
+            eval "$($conda_path shell.zsh hook)"  # 初始化 Conda
+            conda "$@"  # 执行用户输入的 conda 命令
+            return
+        fi
+    done
+
+    # 如果未找到 Conda
+    echo "Error: No Conda installation found in the following paths:"
+    for path in $CONDA_PATHS; do
+        echo "  - $path"
+    done
+    return 1
+}
+# <<< conda initialize <<<
+EOF
 # conda config --set changeps1 true
 echo "Miniconda installed successfully. You can run 'conda' to manage your environments and packages."
 
@@ -399,11 +440,17 @@ echo "Miniconda installed successfully. You can run 'conda' to manage your envir
 echo "===== Installing nvm... ====="
 mkdir -p ~/.nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+sed -i '/export NVM_DIR="$HOME\/.nvm"/,/\[ -s "$NVM_DIR\/bash_completion" \] && \. "$NVM_DIR\/bash_completion"/d' ~/.zshrc
 cat << 'EOF' >> ~/.zshrc
 # >>> nvm initialize >>>
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+function nvm() {
+    echo "Lazy loading nvm upon first invocation..."
+    unfunction nvm
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \\. "$NVM_DIR/bash_completion"
+    nvm "$@"
+}
 # <<< nvm initialize <<<
 EOF
 echo "nvm installed successfully. You can run 'nvm' to manage Node.js versions."
@@ -452,7 +499,7 @@ echo -e "\033[1;36m\n📦 Packages\033[0m\n
   └─ \033[1;35mcolor_theme\033[0m: Catppuccin\n
 \033[1;33m▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\033[0m
 \033[3;36mTips: Please restart your terminal or run 'source ~/.zshrc' to apply changes\n      Maybe you need to run 'conda config --set changeps1 false' to hide conda base in prompt.\033[0m" | sed 's/^/  /'
-[ -f /tmp/arch_packages.log ] && echo -e "Log file: \033[1;33m/tmp/arch_packages.log\033[0m" || echo -e "\033[1;31mCreate log file failed\033[0m, please run 'journalctl -xe' to check system logs."
+[ -f ~/.cache/arch_packages.log ] && echo -e "Log file: \033[1;33m~/.cache/arch_packages.log\033[0m" || echo -e "\033[1;31mCreate log file failed\033[0m, please run 'journalctl -xe' to check system logs."
 
 # ==================================== Switch to user shell ====================================
 su - $USER
