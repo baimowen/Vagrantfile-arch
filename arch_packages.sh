@@ -41,19 +41,19 @@ cd ..
 
 # ==================================== Install packages ====================================
 echo "===== Installing packages... ====="
-sudo pacman -S --noconfirm openssh net-tools ufw jq unp rsync less dos2unix \
+sudo pacman -S --noconfirm --needed openssh net-tools ufw jq unp rsync less dos2unix \
     vim neovim \
-    git lazygit \
-    yazi lf \
-    curl wget \
+    git lazygit gitui tokei \
+    lsd yazi lf fd bat \
+    curl wget hyperfine \
     ncdu duf tree \
     btop ctop mission-center \
-    bat \
-    rsync \
-    cowsay lolcat cava
+    rsync rsyncy
+
+curl https://laktak.github.io/rsyncy.sh | bash
 
 sudo pacman -S --noconfirm fastfetch
-yay -S --noconfirm neofetch rxfetch musicfox
+yay -S --noconfirm neofetch rxfetch onefetch manly howdoi 
 
 neofetch
 
@@ -154,6 +154,18 @@ git config --global status.showStash true
 git config --global color.ui auto
 git config --global user.name "$GIT_USER"
 git config --global user.email "$GIT_EMAIL"
+
+# ==================================== Configuration yazi ====================================
+echo "===== Configuring yazi... ====="
+mkdir -p ~/.config/yazi
+cat << 'EOF' > ~/.config/yazi/config.toml
+# yazi.toml
+[manager]
+show_hidden = true
+show_git = true
+show_icons = true
+show_size = true
+EOF
 
 # ================================ fonts: 0xProtoNerdFontMono MapleMonoNFCN ================================
 sudo pacman -S --noconfirm unzip fontconfig
@@ -258,6 +270,7 @@ alias cp='cp -i'
 alias mv='mv -i'
 alias rm='rm -i'
 alias ls='LC_ALL=C ls -alh --group-directories-first --sort=name --color=auto'
+alias lsd='lsd -alh --tree --group-directories-first --color=auto --icon=always'
 alias grep='grep -iE --color=auto'
 alias cat='bat'
 alias v='nvim'
@@ -302,6 +315,18 @@ alias tv='tmux split-window -v'
 alias tsp='tmux select-pane -t'
 alias tkp='tmux kill-pane'
 # <<< tmux <<<
+
+# >>> fzf >>>
+alias fzf='fzf --height 40% --layout reverse --border --ansi --multi'
+# <<< fzf <<<
+
+# >>> kill >>>
+alias kill="killfzf"
+# <<< kill <<<
+
+# >>> bat >>>
+alias bat='bat -n --color=always --style=plain --paging=auto'
+# <<< bat <<<
 EOF
 
 cat <<'EOF' > ~/.config/shell/bindkeys.sh
@@ -314,8 +339,36 @@ cat <<'EOF' > ~/.config/shell/bindkeys.sh
 # bindkey -M vicmd '\e\e' sudo
 EOF
 
-echo '[ -f "$HOME/.config/dircolors" ] && eval $(dircolors "$HOME/.config/dircolors")' | \
-tee ~/.config/shell/colors.sh > /dev/null
+cat << 'EOF' > ~/.config/shell/colors.sh
+# [ -f "$HOME/.config/dircolors" ] && eval $(dircolors "$HOME/.config/dircolors")
+DCOLORS_PATHS=(
+    "$HOME/.config/dircolors"
+    "$HOME/.dir_colors"
+    "$HOME/.dircolors"
+    "/etc/DIR_COLORS"
+    "/usr/bin/dircolors"
+)
+
+if ! command -v dircolors >/dev/null 2>&1; then
+    echo "[WARN] dircolors command not found - using default colors" >/dev/null
+    return 1
+fi
+
+for config in "${DCOLORS_PATHS[@]}"; do
+    if [[ -f "$config" ]]; then
+        if eval "$(dircolors -b "$config" 2>/dev/null)"; then
+            echo "[INFO] Applied dircolors from: $config" >/dev/null
+            return 0
+        else
+            echo "[WARN] Failed to apply dircolors from: $config" >/dev/null
+        fi
+    fi
+done
+
+echo "[INFO] No valid dircolors found - using defaults" >/dev/null
+eval "$(dircolors -b 2>/dev/null)"
+return 1
+EOF
 
 cat <<'EOF' > ~/.config/shell/history_settings.sh
 HISTFILE=~/.cache/zsh_history
@@ -327,34 +380,105 @@ setopt SHARE_HISTORY
 setopt HIST_IGNORE_SPACE
 EOF
 
+mkdir -p ~/.config/shell/scripts
+cat <<'EOF' > ~/.config/shell/scripts/bat.sh
+batl() {
+    local file="$1"
+    local lang=""
+
+    # 根据文件后缀匹配语言
+    case "$file" in
+        *.conf|*.ini)   lang="ini" ;;
+        *.json)         lang="json" ;;
+        *.yaml|*.yml)  lang="yaml" ;;
+        *.sh|*.zsh|*.bash) lang="sh" ;;
+        *.py)           lang="python" ;;
+        *.js)           lang="javascript" ;;
+        *.html)         lang="html" ;;
+        *.css)          lang="css" ;;
+        *.md)           lang="markdown" ;;
+        *.toml)         lang="toml" ;;
+        *.rs)           lang="rust" ;;
+        *.go)           lang="go" ;;
+        *)              lang="" ;;  # 自动检测
+    esac
+
+    # 调用 bat 并传递语言参数
+    if [ -n "$lang" ]; then
+        command bat --language="$lang" "$@"
+    else
+        command bat "$@"
+    fi
+}
+EOF
+cat <<'EOF' > ~/.config/shell/scripts/killfzf.sh
+# 修改 killfzf 函数，避免在补全时触发
+killfzf() {
+  if [[ -z $COMP_LINE ]]; then  # 仅在直接运行 kill 时触发 fzf
+    local pid=$(ps -aux | fzf | awk '{print $2}')
+    [[ -n $pid ]] && kill "$pid"
+  else
+    command kill "$@"  # 补全时使用默认 kill 行为
+  fi
+}
+EOF
+
 cat <<'EOF' > ~/.zshrc
 case $- in  # check shell options
     *i*) ;;  # interactive shell
       *) return;;  # don't do anything
 esac
 
-[ -f ~/.config/shell/colors.sh ] && source ~/.config/shell/colors.sh
-[ -f ~/.config/shell/aliases.sh ] && source ~/.config/shell/aliases.sh
-[ -f ~/.config/shell/bindkeys.sh ] && source ~/.config/shell/bindkeys.sh
-[ -f ~/.config/shell/history_settings.sh ] && source ~/.config/shell/history_settings.sh
+load_file() {
+    local file="$1"
+    if [[ -f "$file" ]]; then
+        if source "$file" 2>/dev/null; then
+            return 0
+        else
+            echo >&2 "[WARN] Failed to load: $file"
+            return 1
+        fi
+    else
+        echo >&2 "[INFO] File not found, skipping: $file"
+        return 1
+    fi
+}
 
-# git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/zsh-autosuggestions
-# [ -f ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh ] && source $_ || :
-source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
-# git clone https://github.com/zap-zsh/sudo.git ~/.zsh/zsh-sudo
-# [ -f ~/.zsh/zsh-sudo/sudo.plugin.zsh ] && source $_ || :
-source ~/.zsh/zsh-sudo/sudo.plugin.zsh
-# git clone https://github.com/catppuccin/zsh-syntax-highlighting.git ~/.zsh/zsh-catppuccin
-# [ -f ~/.zsh/zsh-catppuccin/themes/catppuccin_mocha-zsh-syntax-highlighting.zsh ] && source $_ || :
-source ~/.zsh/zsh-catppuccin/themes/catppuccin_mocha-zsh-syntax-highlighting.zsh
-# git clone https://github.com/zsh-users/zsh-syntax-highlighting ~/.zsh/zsh-syntax-highlighting
-source ~/.zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+CONFIG_FILES="${HOME}/.config/shell"
+FUNCTIONS_DIR="${CONFIG_FILES}/scripts"
+ZSH_PLUGIN_HOME="${HOME}/.zsh"
+
+# config files
+for config_file in "${CONFIG_FILES}"/*.{sh,zsh}(N); do
+    load_file "$config_file"
+done
+
+# custom functions
+for func_file in "${FUNCTIONS_DIR}"/*.{sh,zsh}(N); do
+    load_file "$func_file"
+done
+
+# zsh plugins
+for plugin_dir in "${ZSH_PLUGIN_HOME}"/*(N); do
+    if [[ "$plugin_dir" != */zsh-syntax-highlighting ]]; then
+        for plugin_file in "$plugin_dir"/*.{zsh,plugin.zsh}(N); do
+            load_file "$plugin_file"
+        done
+    fi
+done
+[ -f "${ZSH_PLUGIN_HOME}/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ] && \
+    load_file "${ZSH_PLUGIN_HOME}/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" || \
+    echo >&2 "[Warning] load zsh-syntax-highlighting faild, skipping"
 
 # starship
 eval "$(starship init zsh)"
 
 # fzf
+[ -f ${CONFIG_FILES}/fzf.zsh ] && source ${CONFIG_FILES}/fzf.zsh || echo >&2 "[Warning] load fzf.sh faild, skipping"
 # source <(/usr/bin/fzf --zsh)
+
+bindkey -r '^I'  # 解除tab快捷键的绑定
+bindkey '^I' complete-word  # 重新将tab快捷键绑定到自动补全
 EOF
 
 cat <<'EOF' > ~/.zprofile
@@ -363,10 +487,9 @@ if [ -z "${WAYLAND_DISPLAY}" ] && [ "$(tty)" = "/dev/tty1" ]; then
     exec Hyprland
 fi
 EOF
-
+chmod +x ~/.config/shell/*.sh
+chmod +x ~/.config/shell/scripts/*.sh
 fzf --zsh > ~/.config/shell/fzf.zsh > /dev/null
-# echo "[ -f ~/.config/shell/fzf.sh ] && source ~/.config/shell/fzf.zsh" | tee -a ~/.zshrc > /dev/null
-sed -i '/^# fzf$/a\[ -f ~\/.config\/shell\/fzf.sh ] \&\& source ~\/.config\/shell\/fzf.zsh' ~/.zshrc
 
 # ==================================== Install starship ====================================
 echo "===== Installing Starship... ====="
@@ -453,7 +576,25 @@ function nvm() {
 }
 # <<< nvm initialize <<<
 EOF
+nvm install --lts
+nvm use --lts
 echo "nvm installed successfully. You can run 'nvm' to manage Node.js versions."
+
+# ==================================== Install manually packages ====================================
+echo "===== Installing manually packages... ====="
+yay -S --noconfirm tempy-git calcure glow termpicker
+sudo pacman -S --noconfirm gum tokei 
+pipx install frogmouth toolong 
+npm i fanyi -g
+
+# ==================================== Install funny packages ====================================
+echo "===== Installing funny packages... ====="
+sudo pacman -S --noconfirm cowsay lolcat cava
+yay -S --noconfirm musicfox
+pipx install sonwmachine
+wget -t 3 https://raw.githubusercontent.com/ContentsViewer/shtris/v3.0.0/shtris && chmod +x shtris && sudo mv shtris /usr/local/bin/shtris
+wget -t 3 https://github.com/mihaigalos/aim/releases/download/1.8.6/aim-1.8.6-x86_64-unknown-linux-gnu.tar.gz && mkdir ~/aim && sudo mv ~/aim/aim /usr/local/bin/aim
+
 
 # ==================================== clear package cache ====================================
 echo "===== Clearing package cache... ====="
@@ -468,10 +609,10 @@ echo "Done. 🎉"
 echo -e "\033[1;36m\n📦 Packages\033[0m\n
 \033[1;33m▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\033[0m\n
 \033[1;32m■ Basic Packages\033[0m
-  ├─ \033[1;34mSystem Manage\033[0m: openssh networkmanager net-tools ufw ncdu duf yay
-  ├─ \033[1;34mFile Manage\033[0m: yazi lf tree unp rsync
-  ├─ \033[1;34mNetwork Tools\033[0m: curl wget frp tailscale
-  └─ \033[1;34mOthers\033[0m: fastfetch rxfetch\n
+  ├─ \033[1;34mSystem Manage\033[0m: openssh networkmanager net-tools ufw ncdu duf yay toolong manly howdoi hyperfine
+  ├─ \033[1;34mFile Manage\033[0m: yazi lf tree unp rsync rsyncy fd
+  ├─ \033[1;34mNetwork Tools\033[0m: curl wget aim frp tailscale
+  └─ \033[1;34mOthers\033[0m: fastfetch rxfetch onefetch fanyi \n
 \033[1;32m■ Terminal Enhancement\033[0m
   ├─ \033[1;35mShell\033[0m: zsh starship
   ├─ \033[1;35mMultiplex\033[0m: tmux
@@ -486,13 +627,14 @@ echo -e "\033[1;36m\n📦 Packages\033[0m\n
   |   └─ dpanel: http://0.0.0.0:8807
   └─ \033[1;33mPerformance Monitor\033[0m: btop ctop mission-center\n
 \033[1;32m■ Development\033[0m
-  ├─ \033[1;36mEditor\033[0m: neo vim lazyvim
-  ├─ \033[1;36mVersion Control\033[0m: git lazygit
+  ├─ \033[1;36mEditor\033[0m: neo vim lazyvim glow frogmouth
+  ├─ \033[1;36mVersion Control\033[0m: git lazygit gitui tokei
   ├─ \033[1;36mContainer Management\033[0m: docker portainer(http://0.0.0.0:9000)
   ├─ \033[1;36mCluster\033[0m: kubectl kind minikube
   └─ \033[1;36mEnvs\033[0m: conda nvm\n
 \033[1;32m■ Funny Tools\033[0m
-  ├─ \033[1;31mtexxt:\033[0m: cowsay lolcat
+  ├─ \033[1;31mtext:\033[0m: cowsay lolcat termpicker
+  ├─ \033[1;31mgames:\033[0m: shtris snowmachine 
   └─ \033[1;31maudio:\033[0m: musicfox cava\n
 \033[1;32m■ Landscaping Extension\033[0m
   ├─ \033[1;35mfonts\033[0m: 0xProtoNerdMono MapleMonoNFCN
@@ -504,3 +646,11 @@ echo -e "\033[1;36m\n📦 Packages\033[0m\n
 # ==================================== Switch to user shell ====================================
 su - $USER
 # source ~/.zshrc
+# # nvim透明背景
+# cat << 'EOF' >> ~/.config/nvim/init.lua
+# vim.cmd([[
+# hi Normal guibg=NONE ctermbg=NONE
+# hi LineNr guibg=NONE ctermbg=NONE
+# hi EndOfBuffer guibg=NONE ctermbg=NONE
+# ]])
+# EOF
