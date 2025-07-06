@@ -41,7 +41,7 @@ cd ..
 
 # ==================================== Install packages ====================================
 echo "===== Installing packages... ====="
-sudo pacman -S --noconfirm --needed openssh net-tools ufw jq unp rsync less dos2unix \
+sudo pacman -S --noconfirm --needed openssh net-tools ufw jq unp less dos2unix \
     vim neovim \
     git lazygit gitui tokei \
     lsd yazi lf fd bat \
@@ -77,21 +77,31 @@ cat << 'EOF' > ~/.tmux.conf
 set -g default-command "exec zsh -l"
 # set-option -g default-command "reattach-to-user-namespace -l $SHELL"
 
-# keymaps
-unbind C-b
-set -g prefix `
-bind ` send-prefix
-
 # List of plugins
 set -g @plugin 'tmux-plugins/tpm'
 set -g @plugin 'tmux-plugins/tmux-sensible'
 set -g @plugin 'christoomey/vim-tmux-navigator'
 set -g @plugin 'tmux-plugins/tmux-yank'
 set -g @plugin 'jimeh/tmuxifier'
+set -g @plugin 'sainnhe/tmux-fzf'
+
+# auto reload
+set-option -g @plugin 'b0o/tmux-autoreload'
+
+# save and restore sessions
+set -g @plugin 'tmux-plugins/tmux-resurrect'
+set -g @plugin 'tmux-plugins/tmux-continuum'
+set -g @continuum-restore 'on'
+# prefix + Ctrl-s - save
+# prefix + Ctrl-r - restore
 
 # catppuccin theme
 set -g @plugin "catppuccin/tmux"
 set -g @catppuccin_flavour "mocha"
+
+# colors
+set -g default-terminal "tmux-256color"
+set -ag terminal-overrides ",xterm-256color:RGB"
 
 # non-plugin options
 set -g default-terminal "tmux-256color"
@@ -106,15 +116,13 @@ set -g mouse on
 #   2. 按下 <空格键> 开始复制，移动光标选择复制区域
 #   3. 按下 <回车键> 复制选中文本并退出复制模式
 #   4. 按下 <]>      粘贴文本
-# 开启vi风格后, 支持vi的C-d、C-u、hjkl等快捷键
-setw -g mode-keys vi
-
+# 开启vi风格后，支持vi的C-d、C-u、hjkl等快捷键
+set -g mode-keys vi
 # Vim 风格的快捷键实现窗格间移动
 bind h select-pane -L
 bind j select-pane -D
 bind k select-pane -U
 bind l select-pane -R
-
 # visual mode
 set-window-option -g mode-keys vi
 bind-key -T copy-mode-vi v send-keys -X begin-selection
@@ -123,6 +131,11 @@ bind-key -T copy-mode-vi y send-keys -X copy-selection-and-cancel
 
 # clipboard support
 set -g set-clipboard on
+
+# keymaps
+unbind C-b
+set -g prefix `
+bind ` send-prefix
 
 # Initialize TMUX plugin manager (keep this line at the very bottom of tmux.conf)
 run '~/.tmux/plugins/tpm/tpm'
@@ -337,6 +350,8 @@ cat <<'EOF' > ~/.config/shell/bindkeys.sh
 # bind key: esc esc -> sudo
 # bindkey -M viins '\e\e' sudo
 # bindkey -M vicmd '\e\e' sudo
+bindkey -r "^I"  # 解除tab快捷键的绑定
+bindkey "^I" complete-word  # 重新将tab快捷键绑定到自动补全
 EOF
 
 cat << 'EOF' > ~/.config/shell/colors.sh
@@ -412,7 +427,6 @@ batl() {
 }
 EOF
 cat <<'EOF' > ~/.config/shell/scripts/killfzf.sh
-# 修改 killfzf 函数，避免在补全时触发
 killfzf() {
   if [[ -z $COMP_LINE ]]; then  # 仅在直接运行 kill 时触发 fzf
     local pid=$(ps -aux | fzf | awk '{print $2}')
@@ -477,8 +491,6 @@ eval "$(starship init zsh)"
 [ -f ${CONFIG_FILES}/fzf.zsh ] && source ${CONFIG_FILES}/fzf.zsh || echo >&2 "[Warning] load fzf.sh faild, skipping"
 # source <(/usr/bin/fzf --zsh)
 
-bindkey -r '^I'  # 解除tab快捷键的绑定
-bindkey '^I' complete-word  # 重新将tab快捷键绑定到自动补全
 EOF
 
 cat <<'EOF' > ~/.zprofile
@@ -486,6 +498,13 @@ cat <<'EOF' > ~/.zprofile
 if [ -z "${WAYLAND_DISPLAY}" ] && [ "$(tty)" = "/dev/tty1" ]; then
     exec Hyprland
 fi
+
+if ! pgrep -u $USER pulseaudio > /dev/null; then
+    pulseaudio --start
+fi
+
+# cava xterm-256color
+export TERM=xterm-256color
 EOF
 chmod +x ~/.config/shell/*.sh
 chmod +x ~/.config/shell/scripts/*.sh
@@ -518,7 +537,7 @@ echo "===== Installing Miniconda... ====="
 mkdir -p ~/miniconda3
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
 bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
-~/miniconda3/bin/conda init zsh
+# ~/miniconda3/bin/conda init zsh
 echo "hide conda base in prompt"
 conda --version
 conda config --set changeps1 false
@@ -589,6 +608,38 @@ npm i fanyi -g
 
 # ==================================== Install funny packages ====================================
 echo "===== Installing funny packages... ====="
+sudo pacman -S --noconfirm pulseaudio mpd mpc ncmpcpp && pulseaudio --check || pulseaudio --start
+mkfifo /tmp/mpd.fifo && chmod 666 /tmp/mpd.fifo
+cat <<EOF > ~/.config/mpd/mpd.conf
+music_directory         "~/Music"
+playlist_directory      "~/.config/mpd/playlists"
+db_file                 "~/.config/mpd/database"
+log_file                "~/.config/mpd/log"
+pid_file                "~/.config/mpd/pid"
+state_file              "~/.config/mpd/state"
+# bind_to_address         "localhost"
+bind_to_address         "127.0.0.1"
+port                    "6600"
+log_level               "default"
+restore_paused          "yes"
+auto_update             "yes"
+auto_update_depth       "4"
+
+audio_output {
+     type            "pulse"
+     name            "pulse audio"
+}
+
+audio_output {
+       type	"fifo"
+       name	"Visualizer feed"
+       path	"/tmp/mpd.fifo"
+       format	"44100:16:2"
+}
+EOF
+mkdir -p ~/Music
+mkdir -p ~/.config/mpd/playlists
+sudo systemctl enable --now mpd
 sudo pacman -S --noconfirm cowsay lolcat cava
 yay -S --noconfirm musicfox
 pipx install sonwmachine
