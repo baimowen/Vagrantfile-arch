@@ -5,7 +5,7 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi 
 
-LOGFILE="$HOME/.cache/arch_packages.log"
+LOGFILE="$HOME/arch_packages.log"
 [ -f $LOGFILE ] && rm -f $LOGFILE
 exec &> >(tee -a $LOGFILE)
 
@@ -132,7 +132,7 @@ sudo pacman -S --noconfirm --needed openssh net-tools nftables jq less man dos2u
 
 # sudo pacman -S --noconfirm fastfetch
 # yay -S --noconfirm rxfetch
-yay -S --noconfirm neofetch onefetch manly \
+yay -S --noconfirm --needed neofetch onefetch manly \
     tempy-git calcure glow termpicker musicfox
     # kind-bin minikube
 # kind create cluster --name kind-cluster
@@ -141,6 +141,18 @@ curl https://laktak.github.io/rsyncy.sh | bash
 
 wget -t 3 https://raw.githubusercontent.com/ContentsViewer/shtris/v3.0.0/shtris && chmod +x shtris && sudo mv shtris /usr/local/bin/shtris
 
+# -- config nftables ---------------------------------------------------------------------------------
+sudo systemctl enable --now nftables
+sudo nft add rule inet filter input iifname lo accept
+sudo nft add rule inet filter input tcp dport 22 accept  # ssh
+sudo nft add rule inet filter input tcp dport { 80, 443 } accept  # http/https
+sudo nft add rule inet filter input tcp dport { 9090 } accept  # cockpit
+sudo nft add rule inet filter input tcp dport { 8807, 9000 } accept  # dpanel portainer
+sudo nft add rule inet filter input ct state established,related accept
+sudo nft add rule inet filter input ip protocol icmp accept
+sudo nft add rule inet filter input ip6 nexthdr ipv6-icmp accept
+sudo nft list ruleset | sudo tee /etc/nftables.conf
+sudo systemctl restart nftables
 
 # -- config tmux ---------------------------------------------------------------------------------
 echo -e "\033[1;32m■ Config tmux\033[0m"
@@ -289,6 +301,7 @@ if git clone https://github.com/Chick2D/neofetch-themes.git $HOME/.config/neofet
     echo "[info]: neofetch configuration complete."
 else
     echo "[error]: Clone failed, skip."
+fi
 neofetch
 
 # -- config nginx and cockpit ---------------------------------------------------------------------------------
@@ -334,10 +347,10 @@ sudo systemctl enable --now docker
 echo "[info]: docker mirror list:"
 sudo docker info | grep -A 5 "Registry Mirrors"
 echo "[info]: create dpanel and portainer container"
-sudo docker run -d --name dpanel --restart=always \
-  -p 88:80 -p 443:443 -p 8807:8080 \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v /home/dpanel:/dpanel -e APP_NAME=dpanel dpanel/dpanel:latest
+# sudo docker run -d --name dpanel --restart=always \
+#   -p 88:80 -p 443:443 -p 8807:8080 \
+#   -v /var/run/docker.sock:/var/run/docker.sock \
+#   -v /home/dpanel:/dpanel -e APP_NAME=dpanel dpanel/dpanel:latest
 sudo docker run -d --name portainer --restart always \
   -p 9000:9000 \
   -v /var/run/docker.sock:/var/run/docker.sock -v /app/portainer_data:/data \
@@ -349,7 +362,7 @@ echo -e "\033[1;32m■ install miniconda\033[0m"
 echo "=== installing Miniconda ==="
 mkdir -p $HOME/miniconda3
 wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-bash miniconda.sh -b -p $HOME/miniconda3
+bash miniconda.sh -b -p ~/miniconda3
 # initialize conda for zsh
 # $HOME/miniconda3/bin/conda init --all
 # hide conda base in prompt
@@ -471,8 +484,8 @@ function nvm() {
     echo "Lazy loading nvm upon first invocation..."
     unfunction nvm
     export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh"
-    [ -s "$NVM_DIR/bash_completion" ] && \\. "$NVM_DIR/bash_completion"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
     nvm "$@"
 }
 # <<< nvm initialize <<<
@@ -622,19 +635,19 @@ chmod +x ~/.config/shell/*.{sh,zsh}
 chmod +x ~/.config/shell/scripts/*.sh
 
 # -- Install lazyvim ---------------------------------------------------------------------------------
-echo -e "\033[1;32m■ Install lazyvim\033[0m"
-mv ~/.config/nvim{,.bak}
-mv ~/.local/share/nvim{,.bak}
-mv ~/.local/state/nvim{,.bak}
-mv ~/.cache/nvim{,.bak}
-git clone https://github.com/LazyVim/starter ~/.config/nvim
-if [ -d ~/.config/nvim ]; then
-    rm -rf ~/.config/nvim/.git
-    echo "LazyVim installed successfully. Now you can run 'nvim' to start using it."
-else
-    echo "Failed to clone LazyVim repository."
-    echo "Skipping LazyVim installation."
-fi
+# echo -e "\033[1;32m■ Install lazyvim\033[0m"
+# mv ~/.config/nvim{,.bak}
+# mv ~/.local/share/nvim{,.bak}
+# mv ~/.local/state/nvim{,.bak}
+# mv ~/.cache/nvim{,.bak}
+# git clone https://github.com/LazyVim/starter ~/.config/nvim
+# if [ -d ~/.config/nvim ]; then
+#     rm -rf ~/.config/nvim/.git
+#     echo "LazyVim installed successfully. Now you can run 'nvim' to start using it."
+# else
+#     echo "Failed to clone LazyVim repository."
+#     echo "Skipping LazyVim installation."
+# fi
 # # nvim透明背景
 # cat << 'EOF' >> $HOME/.config/nvim/init.lua
 # vim.cmd([[
@@ -646,13 +659,17 @@ fi
 
 # -- Clean package cache ---------------------------------------------------------------------------------
 echo -e "\033[1;32m■ Clean package cache\033[0m"
-sudo pacman -Scc
-shopt -s extglob
-rm -rf ~/.cache/!($LOGFILE) 2>/dev/null
-shopt -u extglob
+cat <<'EOF' > ~/clr.sh
+sudo pacman -Sc
+yay -Sc
+# shopt -s extglob
+rm -rf $HOME/.cache/*
+# shopt -u extglob
 sudo rm -rf /tmp/*
 # sudo rm -rf /usr/lib/modules/$(uname -r)-old
 echo "[info]: Package cache cleared."
+EOF
+sh $HOME/clr.sh
 
 # ==================================== Finalize setup ====================================
 echo "Done. 🎉"
@@ -682,4 +699,5 @@ echo -e "\033[1;36m\n📦 Package Summary\033[0m\n
 [ -f $LOGFILE ] && echo -e "Log file: \033[1;33m$LOGFILE\033[0m" || echo -e "\033[1;31mCreate log file failed\033[0m, please run 'journalctl -xe' to check system logs."
 
 # ==================================== Switch to user shell ====================================
-su - $USER
+# su - $USER
+exec $SHELL
